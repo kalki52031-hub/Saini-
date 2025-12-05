@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>3D Chess Game – Smart Bot + Openings + Time Control + Stats</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <style>
+    :root {
+      --bg-dark: #020617;
+      --accent: #38bdf8;
+      --gold: #facc15;
+      --glass: rgba(15,23,42,0.9);
+      --light-square: #f0d9b5;
+      --dark-square: #b58863;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; }
+    body{
+      min-height:100vh; padding:16px;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background:
+        radial-gradient(circle at 0% 0%, #1f2937 0, #020617 50%),
+        radial-gradient(circle at 100% 100%, #0f172a 0, #020617 60%);
+      color:#e5e7eb;
+      display:flex; flex-direction:column; align-items:center; gap:12px;
+    }
+    h1{
+      font-size:22px; text-transform:uppercase; letter-spacing:.12em;
+      background: linear-gradient(120deg,#e5e7eb,#facc15,#e5e7eb);
+      -webkit-background-clip:text; color:transparent;
+      text-shadow:0 2px 8px rgba(0,0,0,.8);
+    }
+    .subtitle{ font-size:11px; text-transform:uppercase; color:#9ca3af; letter-spacing:.18em; }
+
+    .board-shell{ width:360px; max-width:95vw; perspective:900px; }
+    .board-frame{
+      width:100%; padding:10px; border-radius:20px;
+      background: linear-gradient(135deg,#020617,#111827);
+      box-shadow:0 26px 40px rgba(0,0,0,.95), inset 0 0 0 1px rgba(148,163,184,.25);
+      transform: rotateX(12deg); transform-origin:center top;
+    }
+    .board{
+      width:100%; padding-bottom:100%; position:relative;
+      border-radius:14px; overflow:hidden;
+      box-shadow:0 14px 30px rgba(0,0,0,.95), inset 0 0 0 1px rgba(15,23,42,.9);
+      background:#d1d5db;
+    }
+
+    .square{
+      position:absolute; width:12.5%; height:12.5%;
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; user-select:none;
+      transition: transform .08s ease-out, box-shadow .12s ease-out, filter .12s ease-out;
+      font-size:28px;
+    }
+    .square.light{ background:var(--light-square); }
+    .square.dark { background:var(--dark-square); }
+    .square:active{
+      transform:scale(.96);
+      box-shadow: inset 0 3px 10px rgba(0,0,0,.9);
+    }
+
+    .piece{
+      text-shadow:0 2px 4px rgba(0,0,0,.85),0 0 8px rgba(0,0,0,.8);
+    }
+    .piece.white{
+      color:#fefce8;
+      text-shadow:0 1px 2px rgba(0,0,0,.7),0 0 6px rgba(250,204,21,.9);
+    }
+    .piece.black{
+      color:#020617;
+      text-shadow:0 1px 1px rgba(255,255,255,.4),0 0 4px rgba(0,0,0,.9);
+    }
+
+    .piece-img{
+      width:80%; height:80%; object-fit:contain;
+      background:none !important;
+      filter: drop-shadow(0 2px 4px rgba(0,0,0,.85));
+      transition: transform .24s ease;
+    }
+    .piece-img.white-side{
+      filter: brightness(2) contrast(1.1) saturate(.1)
+              drop-shadow(0 2px 4px rgba(0,0,0,.9));
+    }
+    .piece-img.black-side{
+      filter: brightness(.9) contrast(1.2)
+              drop-shadow(0 2px 4px rgba(0,0,0,1));
+    }
+
+    .selected{
+      outline:3px solid var(--gold);
+      outline-offset:-3px;
+      filter:brightness(1.05);
+    }
+    .last-move{
+      box-shadow:
+        inset 0 0 0 3px #34d399,
+        0 0 14px rgba(34,197,94,.9);
+    }
+    .hint-move{ box-shadow: inset 0 0 0 3px rgba(56,189,248,.9); }
+    .hint-capture{ box-shadow: inset 0 0 0 3px rgba(248,113,113,.95); }
+
+    .illegal{ animation: shake .18s; }
+    @keyframes shake{
+      0%{transform:translateX(0)}
+      25%{transform:translateX(-3px)}
+      50%{transform:translateX(3px)}
+      75%{transform:translateX(-2px)}
+      100%{transform:translateX(0)}
+    }
+
+    .panel{
+      width:100%; max-width:360px;
+      background:var(--glass);
+      padding:10px 14px; border-radius:16px;
+      box-shadow:0 16px 30px rgba(0,0,0,.9),
+                 inset 0 0 0 1px rgba(148,163,184,.2);
+      backdrop-filter:blur(14px);
+    }
+    .panel-header{
+      display:flex; justify-content:space-between;
+      align-items:baseline; margin-bottom:4px;
+    }
+    .label{
+      font-size:11px; color:#9ca3af;
+      text-transform:uppercase; letter-spacing:.18em;
+    }
+    .status-text{ font-size:14px; }
+
+    .panel-buttons{
+      display:flex; flex-wrap:wrap;
+      gap:6px; margin-top:6px; margin-bottom:4px;
+    }
+
+    button{
+      background: linear-gradient(135deg,#3b82f6,#2563eb);
+      color:#fff; border:none; padding:6px 12px;
+      border-radius:999px; font-size:13px;
+      box-shadow:0 4px 10px rgba(37,99,235,.7);
+      cursor:pointer;
+    }
+    button.small{ font-size:11px; padding:4px 10px; }
+
+    .timers{
+      display:flex; justify-content:space-between;
+      gap:10px; margin-top:6px; margin-bottom:4px;
+    }
+    .timer-box{
+      flex:1; padding:6px 8px; border-radius:10px;
+      background:rgba(15,23,42,.85);
+    }
+    .timer-name{ font-size:11px; text-transform:uppercase; letter-spacing:.12em; }
+    .timer-value{ font-variant-numeric: tabular-nums; font-size:16px; }
+    .timer-active{
+      box-shadow:
+        0 0 0 1px rgba(56,189,248,.7),
+        0 0 12px rgba(56,189,248,.7);
+    }
+
+    #movesList{
+      max-height:150px; overflow-y:auto;
+      font-size:12px; line-height:1.4;
+    }
+    .move-row{ display:flex; gap:6px; }
+    .move-index{ width:26px; color:#9ca3af; }
+
+    .bot-settings{
+      display:flex; flex-direction:column; gap:6px;
+      margin-top:4px; font-size:12px;
+    }
+    .bot-row{
+      display:flex; justify-content:space-between;
+      align-items:center; gap:8px;
+    }
+    .bot-row label{ font-size:11px; color:#d1d5db; }
+    .bot-row select{
+      flex:1;
+      background:#020617;
+      border-radius:999px;
+      border:1px solid #4b5563;
+      padding:3px 8px;
+      color:#e5e7eb;
+      font-size:11px;
+      outline:none;
+    }
+
+    .about-text{
+      font-size:12px;
+      line-height:1.5;
+      margin-top:6px;
+    }
+    .about-text ul{
+      margin:4px 0 0 16px;
+      padding:0;
+    }
+    .about-text li{
+      margin-bottom:2px;
+    }
+
+    .online-list{
+      margin-top:4px;
+      font-size:12px;
+      background:rgba(15,23,42,0.8);
+      border-radius:10px;
+      padding:6px 8px;
+      max-height:90px;
+      overflow-y:auto;
+    }
+    .online-item{
+      display:flex;
+      justify-content:space-between;
+      margin-bottom:2px;
+    }
+    .online-status{
+      font-size:10px;
+      text-transform:uppercase;
+      letter-spacing:.12em;
+    }
+    .online-status.on{ color:#4ade80; }
+    .online-status.busy{ color:#facc15; }
+  </style>
+</head>
+<body>
+  <h1>3D Chess Game</h1>
+  <div class="subtitle">Your 3D Pieces • Local Game</div>
+
+  <div id="loginContainer" class="panel" style="max-width:360px; margin-top:0;">
+    Loading Login Status...
+  </div>
+  <div style="margin-bottom:6px;">
+    <button id="modeBtn" class="small">Mode: 2P</button>
+  </div>
+
+  <div id="playerProfileTop" class="panel" style="display:flex;align-items:center;gap:10px;">
+    <img id="playerAvatarTop" src="" alt="Avatar" style="width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.08);box-shadow:0 4px 10px rgba(0,0,0,0.6);" />
+    <div style="flex:1;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <input id="playerNameInput" type="text" placeholder="Apna naam daalo..." style="flex:1;padding:6px;border-radius:8px;border:1px solid #374151;background:rgba(255,255,255,0.03);color:#e5e7eb;" />
+        <button id="saveNameBtn" class="small">Naam Save Karo (1)</button>
+      </div>
+      <div style="margin-top:6px;font-size:13px;color:#d1d5db;">
+        <span id="playerNameDisplay">Player 1: —</span>
+        <span style="margin-left:12px;">Rating: <strong id="playerRatingDisplay">1200</strong></span>
+        <button id="resetRatingBtn" class="small" style="margin-left:8px;">Rating Reset</button>
+        <button id="incRatingBtn" class="small" style="margin-left:4px;">+10</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        <div style="font-size:11px;color:#9ca3af;margin-bottom:4px;">Level / XP</div>
+        <div style="background:#0f172a;border-radius:999px;padding:6px;display:flex;align-items:center;gap:8px;">
+          <div style="flex:1;background:#111827;border-radius:999px;height:10px;overflow:hidden;">
+            <div id="xpBar" style="height:10px;width:0%;background:linear-gradient(90deg,#facc15,#38bdf8);"></div>
+          </div>
+          <div style="min-width:80px;font-size:12px;color:#e5e7eb;margin-left:6px;">
+            <span id="levelDisplay">Lv 1</span> (<span id="xpDisplay">0</span>/<span id="xpForNext">100</span>)
+          </div>
+          <div style="display:flex;gap:6px;margin-left:8px;">
+            <button id="addXpBtn" class="small">+10 XP</button>
+            <button id="addXpBigBtn" class="small">+40 XP</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <input id="avatarFileInput" type="file" accept="image/*" style="display:none" />
+    <button id="changeAvatarBtn" class="small">Photo Change (1)</button>
+  </div>
+  <div class="board-shell">
+    <div class="board-frame">
+      <div id="board" class="board"></div>
+    </div>
+  </div>
+
+  <div id="playerProfileBottom" class="panel" style="display:flex;align-items:flex-start;gap:10px;margin-top:8px;">
+    <img id="playerAvatarBottom" src="" alt="Avatar" style="width:48px;height:48px;border-radius:50%;object-fit:cover;border:2px solid rgba(255,255,255,0.06);" />
+    <div style="flex:1;">
+      <div style="display:flex;align-items:center;gap:6px;">
+        <input id="bottomNameInput" type="text" placeholder="Dusre player ka naam..." style="flex:1;padding:6px;border-radius:8px;border:1px solid #374151;background:rgba(255,255,255,0.03);color:#e5e7eb;" />
+        <button id="saveNameBottomBtn" class="small">Naam Save Karo (2)</button>
+      </div>
+      <div style="margin-top:6px;font-size:14px;color:#e5e7eb;">
+        <strong id="playerNameBottom">Player 2 —</strong>
+      </div>
+      <div style="font-size:12px;color:#9ca3af;">
+        Rating: <span id="playerRatingBottom">1200</span> • <span id="levelBottom">Lv 1</span>
+      </div>
+      <div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;">
+        <button id="viewProfileBtn" class="small">Profile Info (2)</button>
+        <button id="resetProfileBtn" class="small">Reset Profile (2)</button>
+      </div>
+    </div>
+
+    <input id="avatarBottomFileInput" type="file" accept="image/*" style="display:none" />
+    <button id="changeAvatarBottomBtn" class="small">Photo Change (2)</button>
+  </div>
+  <div class="panel">
+    <div class="panel-header">
+      <div class="label">Status</div>
+      <div class="tagline">Tap a piece, then tap destination square</div>
+    </div>
+    <div id="status" class="status-text">White to move</div>
+
+    <div class="timers">
+      <div id="whiteTimerBox" class="timer-box timer-active">
+        <div class="timer-name white">White</div>
+        <div id="whiteTimer" class="timer-value">00:00</div>
+      </div>
+      <div id="blackTimerBox" class="timer-box">
+        <div class="timer-name black">Black</div>
+        <div id="blackTimer" class="timer-value">00:00</div>
+      </div>
+    </div>
+
+    <div class="panel-buttons">
+      <button id="resetBtn">New game</button>
+      <button id="undoBtn" class="small">Undo</button>
+      <button id="pieceBtn" class="small">Pieces: 3D</button>
+      <button id="hintBtn" class="small">Hints: ON</button>
+      <button id="soundBtn" class="small">Sound: ON</button>
+      <button id="bestMoveBtn" class="small">Best Move</button>
+      <button id="flipBtn" class="small">Flip</button>
+    </div>
+
+    <div class="panel-header" style="margin-top:6px;">
+      <div class="label">Moves</div>
+    </div>
+    <div id="movesList">No moves yet</div>
+  </div>
+
+  <div class="panel">
+    <div class="label">Bot Settings</div>
+    <div class="bot-settings">
+      <div class="bot-row">
+        <label for="difficultySelect">Difficulty</label>
+        <select id="difficultySelect">
+          <option value="Easy">Easy</option>
+          <option value="Medium" selected>Medium</option>
+          <option value="Hard">Hard</option>
+          <option value="Killer">Killer</option>
+        </select>
+      </div>
+      <div class="bot-row">
+        <label for="openingSelect">Opening</label>
+        <select id="openingSelect">
+          <option value="Auto" selected>Auto</option>
+
+          <option value="Sicilian">Sicilian vs e4</option>
+          <option value="DragonSicilian">Dragon Sicilian vs e4</option>
+          <option value="NajdorfSicilian">Najdorf Sicilian vs e4</option>
+          <option value="Classical">Classical e5 vs e4</option>
+          <option value="French">French e6 vs e4</option>
+          <option value="CaroKann">Caro-Kann c6 vs e4</option>
+          <option value="RuyLopez">Ruy-Lopez (Spanish) vs e4</option>
+
+          <option value="QGD">QGD d5 vs d4</option>
+          <option value="KingsIndian">King's Indian Nf6 vs d4</option>
+          <option value="BenkoGambit">Benko Gambit vs d4</option>
+          <option value="LondonSystemWhite">London System (White idea)</option>
+
+          <option value="RandomBook">Random Book</option>
+        </select>
+      </div>
+      <div class="bot-row">
+        <label for="aggressionSelect">Aggression</label>
+        <select id="aggressionSelect">
+          <option value="Solid">Solid</option>
+          <option value="Balanced" selected>Balanced</option>
+          <option value="Aggressive">Aggressive</option>
+        </select>
+      </div>
+      <div class="bot-row">
+        <label for="defenseSelect">Defense</label>
+        <select id="defenseSelect">
+          <option value="Solid" selected>Solid</option>
+          <option value="Counter">Counter</option>
+          <option value="Gambit">Gambit-style</option>
+        </select>
+      </div>
+      <div class="bot-row">
+        <label for="personalitySelect">Bot Personality</label>
+        <select id="personalitySelect">
+          <option value="Balanced" selected>Balanced</option>
+          <option value="Chill">Chill Bot</option>
+          <option value="Attacker">Attacker Bot</option>
+          <option value="Gambit">Gambit Bot</option>
+        </select>
+      </div>
+      <div class="bot-row">
+        <label for="timeControlSelect">Time Control</label>
+        <select id="timeControlSelect">
+          <option value="none" selected>No Limit</option>
+          <option value="bullet1">Bullet 1 min</option>
+          <option value="blitz3">Blitz 3 min</option>
+          <option value="blitz5">Blitz 5 min</option>
+          <option value="rapid10">Rapid 10 min</option>
+        </select>
+      </div>
+      <div class="bot-row">
+        <label for="incrementSelect">Increment</label>
+        <select id="incrementSelect">
+          <option value="0" selected>0 sec</option>
+          <option value="1">+1 sec</option>
+          <option value="2">+2 sec</option>
+          <option value="5">+5 sec</option>
+        </select>
+      </div>
+    </div>
+    <div class="tagline">
+      Difficulty = Strength • Personality = Style • Time Control = Bullet / Blitz / Rapid + Increment.
+    </div>
+  </div>
+  <div class="panel">
+    <div class="label">Player Rating / Stats (Vs Bot)</div>
+    <div class="about-text">
+      Wins: <span id="winsCount">0</span><br>
+      Losses: <span id="lossesCount">0</span><br>
+      Draws: <span id="drawsCount">0</span><br>
+      Current Streak: <span id="currentStreak">0</span><br>
+      Best Streak: <span id="bestStreak">0</span>
+    </div>
+    <div class="panel-buttons">
+      <button id="resetStatsBtn" class="small">Reset Stats</button>
+    </div>
+    <div class="tagline">Stats sirf Vs Bot ke liye (page reload tak).</div>
+  </div>
+
+  <div class="panel">
+    <div class="label">Friends & Online (Game ke andar)</div>
+    <div class="about-text">
+      <div style="margin-bottom:6px;">
+        Yeh pura system <strong>tumhare game ke andar</strong> hai. Koi Gmail / Twitter / Facebook ki जरूरत नहीं.
+      </div>
+
+      <div style="margin-top:4px;font-size:11px;color:#9ca3af;">Your Unique Game ID:</div>
+      <div style="display:flex;gap:6px;margin-top:4px;align-items:center;">
+        <input id="myId" type="text" readonly
+          style="flex:1;padding:6px;border-radius:8px;border:1px solid #374151;background:rgba(15,23,42,0.9);color:#e5e7eb;font-size:12px;">
+        <button id="copyIdBtn" class="small">Copy ID</button>
+      </div>
+
+      <div style="margin-top:10px;font-size:11px;color:#9ca3af;">Friend ko Invite (ID se):</div>
+      <div style="margin-top:4px;display:flex;gap:6px;align-items:center;">
+        <input id="friendIdInput" type="text" placeholder="Friend ka ID..."
+          style="flex:1;padding:6px;border-radius:8px;border:1px solid #374151;background:rgba(255,255,255,0.03);color:#e5e7eb;font-size:12px;">
+        <button id="inviteFriendBtn" class="small">Invite</button>
+      </div>
+
+      <div style="margin-top:8px;">
+        <button id="randomOnlineBtn" class="small">Random Online Player</button>
+      </div>
+
+      <div id="onlineStatus" class="tagline" style="margin-top:6px;">
+        Demo mode: actual online server abhi connect nahi hai, par pura flow yahi rehega.
+      </div>
+
+      <div style="margin-top:10px;font-size:11px;color:#9ca3af;">Online Players (Demo):</div>
+      <div class="online-list" id="onlineList">
+      </div>
+
+      <div style="margin-top:10px;">Voice / Video / Chat (future online):</div>
+      <div class="panel-buttons" style="margin-top:4px;">
+        <button id="voiceChatBtn" class="small">Voice Chat</button>
+        <button id="videoCallBtn" class="small">Video Call</button>
+        <button id="chatBtn" class="small">Chat System</button>
+      </div>
+      <div class="tagline" style="margin-top:4px;">
+        Abhi ye sab <strong>demo alert</strong> hai. Jab server connect karoge, yahi buttons se real call / chat chalega.
+      </div>
+    </div>
+  </div>
+
+  <audio id="moveSound" src="move-sound.mp3" preload="auto"></audio>
+
+  <!-- Firebase (Compat SDKs) -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.1/firebase-database-compat.js"></script>
+
+  <!-- Firebase Init + Auth + Realtime Database -->
+  <script>
+    // 🔥 BossChess – REAL Firebase Config (Web)
+    const firebaseConfig = {
+      apiKey: "AIzaSyB33UgkoyYezqGeyYEKBE5BMUfQrxe3-PE",
+      authDomain: "bosschess-c9791.firebaseapp.com",
+      projectId: "bosschess-c9791",
+      storageBucket: "bosschess-c9791.firebasestorage.app",
+      messagingSenderId: "325067489020",
+      appId: "1:325067489020:web:8b9321149b9aedd0286179",
+      measurementId: "G-5BDQG9QJMB"
+    };
+
+    let auth = null;
+    let database = null;
+
+    try {
+      firebase.initializeApp(firebaseConfig);
+      auth = firebase.auth();
+      database = firebase.database();
+      console.log("Firebase initialized OK");
+    } catch (e) {
+      console.error("Firebase Initialization Error. Check your configuration.", e);
+      const lc = document.getElementById("loginContainer");
+      if (lc) {
+        lc.innerHTML = `<span style="color:red; font-size:12px;">Firebase Error: Check console config.</span>`;
+      }
+    }
+
+    // 👉 Google Sign-in
+    window.signInWithGoogle = async function () {
+      if (!auth) {
+        alert("Firebase init error. Console check karo.");
+        return;
+      }
+      const provider = new firebase.auth.GoogleAuthProvider();
+      try {
+        const result = await auth.signInWithPopup(provider);
+        const user = result.user;
+        console.log("Google Login Successful:", user.displayName, user.uid);
+      } catch (error) {
+        console.error("Google Login Failed:", error);
+        if (error.code !== "auth/popup-closed-by-user") {
+          alert("Login Failed: " + error.message);
+        }
+      }
+    };
+
+    // 👉 Logout
+    window.signOutUser = async function () {
+      if (!auth) return;
+      try {
+        await auth.signOut();
+        alert("Successfully logged out.");
+      } catch (error) {
+        console.error("Logout Error:", error);
+      }
+    };
+
+    // 👉 Login status / UI update
+    function updateLoginStatus(user) {
+      const loginContainer = document.getElementById("loginContainer");
+      const playerNameDisplay = document.getElementById("playerNameDisplay");
+
+      if (!loginContainer) return;
+
+      if (user) {
+        const displayName = user.displayName || "Logged In User";
+        const photo = user.photoURL || "default-avatar.png";
+
+        loginContainer.innerHTML = `
+          <div style="display:flex; align-items:center; justify-content:space-between;">
+            <div style="display:flex; align-items:center; gap:8px;">
+              <img src="${photo}" style="width:24px; height:24px; border-radius:50%;" alt="Avatar">
+              <span style="font-size:13px; color:#9ca3af;">Logged in as: <strong>${displayName}</strong></span>
+            </div>
+            <button id="logoutBtn" class="small" style="background:linear-gradient(135deg,#dc2626,#ef4444);box-shadow:0 4px 10px rgba(220,38,38,.7);">Logout</button>
+          </div>
+        `;
+        const logoutBtn = document.getElementById("logoutBtn");
+        if (logoutBtn) logoutBtn.addEventListener("click", window.signOutUser);
+
+        if (playerNameDisplay) {
+          playerNameDisplay.textContent = "Player 1: " + displayName;
+        }
+      } else {
+        // Logged out: show login button
+        loginContainer.innerHTML = `
+          <button id="googleLoginBtn" class="small">Login with Google</button>
+        `;
+        const loginBtn = document.getElementById("googleLoginBtn");
+        if (loginBtn) loginBtn.addEventListener("click", window.signInWithGoogle);
+
+        if (playerNameDisplay) {
+          playerNameDisplay.textContent = "Player 1: —";
+        }
+      }
+    }
+
+    if (auth) {
+      auth.onAuthStateChanged(updateLoginStatus);
+    }
+
+    // ✅ Realtime Database: Game Room create function (REAL)
+    // Example: window.createNewGameRoom("ROOM123");
+    window.createNewGameRoom = function (roomId) {
+      if (!auth || !database) {
+        alert("Firebase init error. Console check karo.");
+        return;
+      }
+      const user = auth.currentUser;
+      if (!user) {
+        alert("Pehle Google se login karo.");
+        return;
+      }
+
+      const player1_UID = user.uid;
+      const roomRef = database.ref("games/" + roomId);
+
+      roomRef
+        .set({
+          player1: player1_UID,
+          player2: null,
+          boardState:
+            "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+          turn: player1_UID,
+          createdAt: Date.now()
+        })
+        .then(() => {
+          console.log("New game room created:", roomId);
+          alert("Room " + roomId + " create ho gaya (Realtime DB).");
+        })
+        .catch((err) => {
+          console.error("Room create error:", err);
+          alert("Room create error: " + err.message);
+        });
+    };
+  </script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.2/chess.min.js"></script>
+  <script>
+    // ===== Chess Game Logic (same as your code, Firebase se alag) =====
+    const PIECES_UNICODE = {
+      "r":"♜","n":"♞","b":"♝","q":"♛","k":"♚","p":"♟",
+      "R":"♖","N":"♘","B":"♗","Q":"♕","K":"♔","P":"♙"
+    };
+    const pieceImages3D = {
+      "P":"pawns-image.jpg","p":"pawns-image.jpg",
+      "N":"knights-image.jpg","n":"knights-image.jpg",
+      "B":"bishops-image.jpg","b":"bishops-image.jpg",
+      "R":"rooks-image.jpg","r":"rooks-image.jpg",
+      "Q":"Queen-image.jpg","q":"Queen-image.jpg",
+      "K":"king-image.jpg","k":"king-image.jpg"
+    };
+
+    const boardEl = document.getElementById("board");
+    const statusEl = document.getElementById("status");
+    const movesListEl = document.getElementById("movesList");
+    const resetBtn = document.getElementById("resetBtn");
+    const undoBtn = document.getElementById("undoBtn");
+    const pieceBtn = document.getElementById("pieceBtn");
+    const hintBtn = document.getElementById("hintBtn");
+    const bestMoveBtn = document.getElementById("bestMoveBtn");
+    const whiteTimerEl = document.getElementById("whiteTimer");
+    const blackTimerEl = document.getElementById("blackTimer");
+    const whiteTimerBox = document.getElementById("whiteTimerBox");
+    const blackTimerBox = document.getElementById("blackTimerBox");
+    const modeBtn  = document.getElementById("modeBtn");
+    const moveSound = document.getElementById("moveSound");
+    const soundBtn = document.getElementById("soundBtn");
+    const flipBtn = document.getElementById("flipBtn");
+
+    const difficultySelect = document.getElementById("difficultySelect");
+    const openingSelect = document.getElementById("openingSelect");
+    const aggressionSelect = document.getElementById("aggressionSelect");
+    const defenseSelect = document.getElementById("defenseSelect");
+    const personalitySelect = document.getElementById("personalitySelect");
+    const timeControlSelect = document.getElementById("timeControlSelect");
+    const incrementSelect = document.getElementById("incrementSelect");
+
+    const winsEl = document.getElementById("winsCount");
+    const lossesEl = document.getElementById("lossesCount");
+    const drawsEl = document.getElementById("drawsCount");
+    const currentStreakEl = document.getElementById("currentStreak");
+    const bestStreakEl = document.getElementById("bestStreak");
+    const resetStatsBtn = document.getElementById("resetStatsBtn");
+
+    // Friends & Online panel elements (game ke andar)
+    const myIdEl           = document.getElementById("myId");
+    const copyIdBtn        = document.getElementById("copyIdBtn");
+    const friendIdInput    = document.getElementById("friendIdInput");
+    const inviteFriendBtn  = document.getElementById("inviteFriendBtn");
+    const randomOnlineBtn  = document.getElementById("randomOnlineBtn");
+    const onlineStatus     = document.getElementById("onlineStatus");
+    const onlineListEl     = document.getElementById("onlineList");
+    const voiceChatBtn     = document.getElementById("voiceChatBtn");
+    const videoCallBtn     = document.getElementById("videoCallBtn");
+    const chatBtn          = document.getElementById("chatBtn");
+
+    const game = new Chess();
+    let selectedSquare = null;
+    let lastMove = null;
+    let showHints = true;
+    let pieceStyle = "3d";
+    let isVsAI = false;
+    const aiColor = "b";
+    let aiThinking = false;
+
+    let whiteTime = 0;
+    let blackTime = 0;
+    let timerInterval = null;
+    let soundOn = true;
+
+    let difficulty = "Medium";
+    let openingStyle = "Auto";
+    let aggression = "Balanced";
+    let defenseStyle = "Solid";
+
+    let wins = 0, losses = 0, draws = 0;
+    let gameFinished = false;
+    let currentStreak = 0;
+    let bestStreak = 0;
+
+    let isFlipped = false;
+
+    // time control
+    let timeControl = "none";
+    let initialTime = 0;
+    let increment = 0;
+    let timeOver = false;
+    let flaggedSide = null;
+
+    difficultySelect.addEventListener("change", e => {
+      difficulty = e.target.value;
+    });
+    openingSelect.addEventListener("change", e => {
+      openingStyle = e.target.value;
+    });
+    aggressionSelect.addEventListener("change", e => {
+      aggression = e.target.value;
+    });
+    defenseSelect.addEventListener("change", e => {
+      defenseStyle = e.target.value;
+    });
+
+    personalitySelect.addEventListener("change", e => {
+      const val = e.target.value;
+      if (val === "Chill") {
+        aggression = "Solid";
+        defenseStyle = "Solid";
+      } else if (val === "Balanced") {
+        aggression = "Balanced";
+        defenseStyle = "Solid";
+      } else if (val === "Attacker") {
+        aggression = "Aggressive";
+        defenseStyle = "Gambit";
+      } else if (val === "Gambit") {
+        aggression = "Aggressive";
+        defenseStyle = "Gambit";
+      }
+      aggressionSelect.value = aggression;
+      defenseSelect.value = defenseStyle;
+    });
+
+    timeControlSelect.addEventListener("change", e => {
+      timeControl = e.target.value;
+      if (timeControl === "bullet1")      initialTime = 60;
+      else if (timeControl === "blitz3")  initialTime = 180;
+      else if (timeControl === "blitz5")  initialTime = 300;
+      else if (timeControl === "rapid10") initialTime = 600;
+      else                                initialTime = 0;
+      resetTimer();
+    });
+
+    incrementSelect.addEventListener("change", e => {
+      increment = parseInt(e.target.value, 10) || 0;
+    });
+
+    function updateStatsUI(){
+      winsEl.textContent = wins;
+      lossesEl.textContent = losses;
+      drawsEl.textContent = draws;
+      currentStreakEl.textContent = currentStreak;
+      bestStreakEl.textContent = bestStreak;
+    }
+
+    resetStatsBtn.addEventListener("click", ()=>{
+      wins = 0; losses = 0; draws = 0;
+      currentStreak = 0; bestStreak = 0;
+      updateStatsUI();
+    });
+
+    flipBtn.addEventListener("click", () => {
+      isFlipped = !isFlipped;
+      drawBoard();
+    });
+
+    function playMoveSound(){
+      if(!soundOn) return;
+      try{
+        moveSound.currentTime = 0;
+        moveSound.play().catch(()=>{});
+      }catch(e){}
+    }
+
+    function fenToArray(fen){
+      const part = fen.split(" ")[0];
+      const rows = part.split("/");
+      const board = [];
+      rows.forEach(r=>{
+        const rowArr=[];
+        for(let ch of r){
+          if(!isNaN(ch)){
+            const empty = parseInt(ch,10);
+            for(let i=0;i<empty;i++) rowArr.push(".");
+          } else rowArr.push(ch);
+        }
+        board.push(rowArr);
+      });
+      return board;
+    }
+
+    function coordToSquare(row,col){
+      const file = String.fromCharCode("a".charCodeAt(0)+col);
+      const rank = 8-row;
+      return file+rank;
+    }
+
+    function clearHighlights(){
+      document.querySelectorAll(".square").forEach(sq=>{
+        sq.classList.remove("selected","last-move","hint-move","hint-capture","illegal");
+      });
+    }
+
+    function animateMove(fromSquare, toSquare, callback){
+      const fromEl = document.querySelector('.square[data-square="'+fromSquare+'"]');
+      const toEl   = document.querySelector('.square[data-square="'+toSquare+'"]');
+      if(!fromEl || !toEl){ if(callback) callback(); return; }
+      const child = fromEl.firstElementChild;
+      if(!child){ if(callback) callback(); return; }
+      const rectFrom = child.getBoundingClientRect();
+      const rectTo   = toEl.getBoundingClientRect();
+
+      const clone = child.cloneNode(true);
+      clone.classList.add("anim-clone");
+      clone.style.position = "fixed";
+      clone.style.left = rectFrom.left + "px";
+      clone.style.top  = rectFrom.top  + "px";
+      clone.style.width = rectFrom.width + "px";
+      clone.style.height = rectFrom.height + "px";
+      clone.style.opacity = "1";
+      clone.style.pointerEvents = "none";
+      document.body.appendChild(clone);
+
+      clone.getBoundingClientRect();
+
+      const dx = rectTo.left - rectFrom.left;
+      const dy = rectTo.top  - rectFrom.top;
+      clone.style.transform = `translate(${dx}px,${dy}px)`;
+      clone.style.transition = "transform .36s cubic-bezier(.2,.9,.2,1), opacity .36s ease";
+
+      setTimeout(()=>{ clone.style.opacity = "0"; }, 320);
+      setTimeout(()=>{ clone.remove(); if(callback) callback(); }, 420);
+    }
+
+    function findMoveBySan(san){
+      const moves = game.moves({ verbose:true });
+      return moves.find(m => m.san === san) || null;
+    }
+
+    function getBookMove(){
+      if (game.turn() !== aiColor) return null;
+
+      const hist = game.history();
+      const ply = hist.length;
+
+      if (ply > 6) return null;
+
+      const lastWhiteMove = (ply % 2 === 1) ? hist[ply - 1] : null;
+      if (!lastWhiteMove) return null;
+
+      let sanChoice = null;
+
+      if (lastWhiteMove === "e4") {
+        if (openingStyle === "Sicilian") sanChoice = "c5";
+        else if (openingStyle === "DragonSicilian") sanChoice = "c5";
+        else if (openingStyle === "NajdorfSicilian") sanChoice = "c5";
+        else if (openingStyle === "French") sanChoice = "e6";
+        else if (openingStyle === "CaroKann") sanChoice = "c6";
+        else if (openingStyle === "Classical") sanChoice = "e5";
+        else if (openingStyle === "RuyLopez") sanChoice = "e5";
+        else if (openingStyle === "BenkoGambit") sanChoice = "c5";
+        else if (openingStyle === "LondonSystemWhite") {
+          const opts = ["d5","e6"];
+          sanChoice = opts[Math.floor(Math.random()*opts.length)];
+        }
+        else if (openingStyle === "RandomBook") {
+          const opts = ["c5","e6","c6","e5","d5"];
+          sanChoice = opts[Math.floor(Math.random()*opts.length)];
+        }
+        else sanChoice = "c5";
+
+        return findMoveBySan(sanChoice);
+      }
+
+      if (lastWhiteMove === "d4") {
+        if (openingStyle === "QGD") sanChoice = "d5";
+        else if (openingStyle === "KingsIndian") sanChoice = "Nf6";
+        else if (openingStyle === "BenkoGambit") sanChoice = "c5";
+        else if (openingStyle === "LondonSystemWhite") {
+          const opts = ["d5","Nf6"];
+          sanChoice = opts[Math.floor(Math.random()*opts.length)];
+        }
+        else if (openingStyle === "RandomBook") {
+          const opts = ["d5","Nf6","c5"];
+          sanChoice = opts[Math.floor(Math.random()*opts.length)];
+        }
+        else {
+          const opts = ["d5","Nf6"];
+          sanChoice = opts[Math.floor(Math.random()*opts.length)];
+        }
+
+        return findMoveBySan(sanChoice);
+      }
+
+      return null;
+    }
+
+    function handleFlag(side){
+      timeOver = true;
+      flaggedSide = side;
+      stopTimer();
+
+      if (isVsAI && !gameFinished) {
+        if (side === "White") {
+          losses++;
+          currentStreak = 0;
+        } else {
+          wins++;
+          currentStreak++;
+          if(currentStreak > bestStreak) bestStreak = currentStreak;
+        }
+        updateStatsUI();
+        gameFinished = true;
+      }
+
+      statusEl.textContent = side + " flagged on time";
+    }
+
+    function drawBoard(){
+      boardEl.innerHTML = "";
+      const matrix = fenToArray(game.fen());
+      const size = 12.5;
+
+      for(let row=0; row<8; row++){
+        for(let col=0; col<8; col++){
+          const sqDiv = document.createElement("div");
+          sqDiv.classList.add("square");
+          const dark = (row+col)%2 === 1;
+          sqDiv.classList.add(dark ? "dark" : "light");
+
+          const displayRow = isFlipped ? 7 - row : row;
+          const displayCol = isFlipped ? 7 - col : col;
+          sqDiv.style.left = (displayCol*size) + "%";
+          sqDiv.style.top  = (displayRow*size) + "%";
+
+          const square = coordToSquare(row,col);
+          sqDiv.dataset.square = square;
+
+          const piece = matrix[row][col];
+          if(piece !== "."){
+            if(pieceStyle === "3d" && pieceImages3D[piece]){
+              const img = document.createElement("img");
+              img.src = pieceImages3D[piece];
+              const isUpper = (piece === piece.toUpperCase());
+              img.classList.add("piece-img", isUpper ? "black-side" : "white-side");
+              sqDiv.appendChild(img);
+            } else {
+              const span = document.createElement("span");
+              span.textContent = PIECES_UNICODE[piece] || "";
+              span.classList.add("piece", piece === piece.toUpperCase() ? "white" : "black");
+              sqDiv.appendChild(span);
+            }
+          }
+
+          if(lastMove && (square === lastMove.from || square === lastMove.to)){
+            sqDiv.classList.add("last-move");
+          }
+
+          sqDiv.addEventListener("click", ()=> onSquareClick(square));
+          boardEl.appendChild(sqDiv);
+        }
+      }
+
+      updateStatus();
+      updateMovesList();
+      updateActiveTimerHighlight();
+    }
+
+    function updateStatus(){
+      if(timeOver){
+        return;
+      }
+
+      let status = "";
+      const turnColor = game.turn() === "w" ? "White" : "Black";
+
+      if(game.in_checkmate()){
+        status = "Checkmate – " + (turnColor === "White" ? "Black" : "White") + " wins";
+        if(!gameFinished && isVsAI){
+          const winner = (turnColor === "White" ? "Black" : "White");
+          if(winner === "White"){
+            wins++;
+            currentStreak++;
+            if(currentStreak > bestStreak) bestStreak = currentStreak;
+          } else {
+            losses++;
+            currentStreak = 0;
+          }
+          updateStatsUI();
+          gameFinished = true;
+        }
+        stopTimer();
+      } else if(game.in_draw()){
+        status = "Draw";
+        if(!gameFinished && isVsAI){
+          draws++;
+          currentStreak = 0;
+          updateStatsUI();
+          gameFinished = true;
+        }
+        stopTimer();
+      } else {
+        if(isVsAI){
+          if(game.turn() === "w") status = "Your move (White)";
+          else status = aiThinking ? "AI thinking..." : "AI move (0.3 sec)";
+        } else {
+          status = turnColor + " to move";
+        }
+        if(game.in_check()) status += " • Check!";
+      }
+
+      statusEl.textContent = status;
+    }
+
+    function updateMovesList(){
+      const hist = game.history();
+      if(!hist.length){
+        movesListEl.textContent = "No moves yet";
+        return;
+      }
+      movesListEl.innerHTML = "";
+      for(let i=0;i<hist.length;i+=2){
+        const row = document.createElement("div");
+        row.classList.add("move-row");
+        const idx = document.createElement("div");
+        idx.classList.add("move-index");
+        idx.textContent = (i/2+1) + ".";
+        const wSpan = document.createElement("div");
+        wSpan.textContent = hist[i] || "";
+        const bSpan = document.createElement("div");
+        bSpan.textContent = hist[i+1] || "";
+        row.appendChild(idx); row.appendChild(wSpan); row.appendChild(bSpan);
+        movesListEl.appendChild(row);
+      }
+    }
+
+    function showHintsForSquare(square){
+      if(!showHints) return;
+      if(isVsAI && game.turn() === aiColor) return;
+      const moves = game.moves({ square, verbose:true });
+      moves.forEach(m=>{
+        const sq = document.querySelector('.square[data-square="'+m.to+'"]');
+        if(!sq) return;
+        if(m.captured) sq.classList.add("hint-capture");
+        else sq.classList.add("hint-move");
+      });
+    }
+
+    function onSquareClick(square){
+      if(game.game_over()) return;
+      if(timeOver) return;
+      if(aiThinking) return;
+      if(isVsAI && game.turn() === aiColor) return;
+
+      const pieceOnClicked = game.get(square);
+
+      if(selectedSquare === square){
+        selectedSquare = null;
+        clearHighlights();
+        drawBoard();
+        return;
+      }
+
+      if(selectedSquare){
+        if(pieceOnClicked && pieceOnClicked.color === game.turn()){
+          selectedSquare = square;
+          clearHighlights();
+          drawBoard();
+          const sqDiv = document.querySelector('.square[data-square="'+square+'"]');
+          if(sqDiv) sqDiv.classList.add("selected");
+          showHintsForSquare(square);
+          return;
+        }
+
+        const moveAttempt = game.move({
+          from: selectedSquare,
+          to: square,
+          promotion: "q"
+        });
+
+        if(!moveAttempt){
+          const sqDiv = document.querySelector('.square[data-square="'+square+'"]');
+          if(sqDiv){
+            sqDiv.classList.add("illegal");
+            setTimeout(()=> sqDiv.classList.remove("illegal"), 200);
+          }
+          return;
+        }
+
+        if(timeControl !== "none" && increment > 0){
+          if(moveAttempt.color === "w") whiteTime += increment;
+          else blackTime += increment;
+        }
+
+        playMoveSound();
+        lastMove = { from: moveAttempt.from, to: moveAttempt.to };
+        const fromSq = moveAttempt.from;
+        const toSq   = moveAttempt.to;
+
+        animateMove(fromSq, toSq, ()=>{
+          selectedSquare = null;
+          clearHighlights();
+          drawBoard();
+          if(isVsAI && !game.game_over() && !timeOver){
+            aiMove();
+          }
+        });
+
+        return;
+      }
+
+      if(!pieceOnClicked || pieceOnClicked.color !== game.turn()) return;
+      selectedSquare = square;
+      clearHighlights();
+      drawBoard();
+      const sqDiv = document.querySelector('.square[data-square="'+square+'"]');
+      if(sqDiv) sqDiv.classList.add("selected");
+      showHintsForSquare(square);
+    }
+
+    function formatTime(sec){
+      const m = Math.floor(sec/60);
+      const s = sec%60;
+      const mm = m<10 ? "0"+m : ""+m;
+      const ss = s<10 ? "0"+s : ""+s;
+      return mm+":"+ss;
+    }
+    function updateTimerDisplay(){
+      whiteTimerEl.textContent = formatTime(Math.max(0, whiteTime));
+      blackTimerEl.textContent = formatTime(Math.max(0, blackTime));
+    }
+    function updateActiveTimerHighlight(){
+      whiteTimerBox.classList.remove("timer-active");
+      blackTimerBox.classList.remove("timer-active");
+      if(game.game_over() || timeOver) return;
+      if(game.turn() === "w") whiteTimerBox.classList.add("timer-active");
+      else blackTimerBox.classList.add("timer-active");
+    }
+    function startTimer(){
+      stopTimer();
+      timerInterval = setInterval(()=>{
+        if(game.game_over() || timeOver){
+          stopTimer(); return;
+        }
+
+        if(timeControl === "none"){
+          if(game.turn() === "w") whiteTime++;
+          else blackTime++;
+        } else {
+          if(game.turn() === "w"){
+            whiteTime--;
+            if(whiteTime <= 0){
+              whiteTime = 0;
+              updateTimerDisplay();
+              handleFlag("White");
+              return;
+            }
+          } else {
+            blackTime--;
+            if(blackTime <= 0){
+              blackTime = 0;
+              updateTimerDisplay();
+              handleFlag("Black");
+              return;
+            }
+          }
+        }
+
+        updateTimerDisplay();
+      }, 1000);
+      updateActiveTimerHighlight();
+    }
+    function stopTimer(){
+      if(timerInterval){
+        clearInterval(timerInterval);
+        timerInterval = null;
+      }
+      updateActiveTimerHighlight();
+    }
+    function resetTimer(){
+      stopTimer();
+      timeOver = false;
+      flaggedSide = null;
+      if(timeControl === "none"){
+        whiteTime = 0;
+        blackTime = 0;
+      } else {
+        whiteTime = initialTime;
+        blackTime = initialTime;
+      }
+      updateTimerDisplay();
+      startTimer();
+    }
+
+    function evaluateMaterial(){
+      const boardArr = game.board();
+      let score = 0;
+      const values = { p:100, n:320, b:330, r:500, q:900, k:0 };
+      for(let row=0; row<8; row++){
+        for(let col=0; col<8; col++){
+          const piece = boardArr[row][col];
+          if(!piece) continue;
+          const val = values[piece.type] || 0;
+          if(piece.color === "w") score += val;
+          else score -= val;
+        }
+      }
+      return score;
+    }
+
+    function showBestMoveHint(){
+      if(game.game_over() || timeOver) return;
+      const moves = game.moves({ verbose:true });
+      if(!moves.length) return;
+
+      const turnBefore = game.turn();
+      let bestMove = null;
+      let bestScore = (turnBefore === "w") ? -Infinity : Infinity;
+
+      for(const m of moves){
+        game.move(m);
+        const evalScore = evaluateMaterial();
+        game.undo();
+
+        if(turnBefore === "w"){
+          if(evalScore > bestScore){
+            bestScore = evalScore;
+            bestMove = m;
+          }
+        }else{
+          if(evalScore < bestScore){
+            bestScore = evalScore;
+            bestMove = m;
+          }
+        }
+      }
+
+      if(bestMove){
+        clearHighlights();
+        const fromEl = document.querySelector('.square[data-square="'+bestMove.from+'"]');
+        const toEl   = document.querySelector('.square[data-square="'+bestMove.to+'"]');
+        if(fromEl) fromEl.classList.add("selected");
+        if(toEl) toEl.classList.add("hint-move");
+        statusEl.textContent = statusEl.textContent.replace(/ • Best:.*$/,"");
+        statusEl.textContent += " • Best: " + bestMove.san;
+      }
+    }
+
+    bestMoveBtn.addEventListener("click", showBestMoveHint);
+
+    function aiMove() {
+      if(timeOver) return;
+      aiThinking = true;
+      updateStatus();
+
+      const delay = 300;
+
+      setTimeout(() => {
+        if (game.game_over() || timeOver) {
+          aiThinking = false;
+          updateStatus();
+          return;
+        }
+
+        let moveToPlay = getBookMove();
+
+        const legalMovesVerbose = game.moves({ verbose: true });
+        if (!legalMovesVerbose.length) {
+          aiThinking = false;
+          updateStatus();
+          return;
+        }
+
+        if (!moveToPlay) {
+          let candidates = legalMovesVerbose.slice();
+          const captures = legalMovesVerbose.filter(m => m.captured);
+          const checks   = legalMovesVerbose.filter(m => m.san.includes("+"));
+
+          if (aggression === "Aggressive" && (captures.length || checks.length)) {
+            candidates = captures.concat(checks);
+          } else if (difficulty === "Killer") {
+            if (captures.length) candidates = captures;
+            else if (checks.length) candidates = checks;
+          }
+
+          moveToPlay = candidates[Math.floor(Math.random()*candidates.length)];
+        }
+
+        const moveObj = game.move(moveToPlay);
+        if (moveObj) {
+          if(timeControl !== "none" && increment > 0){
+            if(moveObj.color === "w") whiteTime += increment;
+            else blackTime += increment;
+          }
+
+          playMoveSound();
+          lastMove = { from: moveObj.from, to: moveObj.to };
+        }
+
+        aiThinking = false;
+        clearHighlights();
+        drawBoard();
+      }, delay);
+    }
+
+    resetBtn.addEventListener("click", ()=>{
+      game.reset();
+      lastMove=null;
+      selectedSquare=null;
+      clearHighlights();
+      gameFinished = false;
+      timeOver = false;
+      flaggedSide = null;
+      drawBoard();
+      resetTimer();
+    });
+
+    undoBtn.addEventListener("click", ()=>{
+      if(isVsAI){
+        game.undo();
+        game.undo();
+      } else {
+        game.undo();
+      }
+      lastMove=null;
+      selectedSquare=null;
+      clearHighlights();
+      gameFinished = false;
+      timeOver = false;
+      flaggedSide = null;
+      drawBoard();
+    });
+
+    pieceBtn.addEventListener("click", ()=>{
+      pieceStyle = (pieceStyle==="3d") ? "unicode" : "3d";
+      pieceBtn.textContent = "Pieces: " + (pieceStyle==="3d" ? "3D" : "Text");
+      drawBoard();
+    });
+
+    hintBtn.addEventListener("click", ()=>{
+      showHints = !showHints;
+      hintBtn.textContent = "Hints: " + (showHints ? "ON" : "OFF");
+      clearHighlights();
+      drawBoard();
+    });
+
+    soundBtn.addEventListener("click", ()=>{
+      soundOn = !soundOn;
+      soundBtn.textContent = "Sound: " + (soundOn ? "ON" : "OFF");
+    });
+
+    modeBtn.addEventListener("click", ()=>{
+      isVsAI = !isVsAI;
+      modeBtn.textContent = "Mode: " + (isVsAI ? "Vs Bot" : "2P");
+      game.reset();
+      lastMove=null;
+      selectedSquare=null;
+      clearHighlights();
+      gameFinished = false;
+      timeOver = false;
+      flaggedSide = null;
+      currentStreak = 0;
+      updateStatsUI();
+      drawBoard();
+      resetTimer();
+    });
+
+    /* ===== Friends & Online (Game ke andar) – demo logic ===== */
+
+    const MY_ID_STORAGE_KEY = "chess_game_my_id_v1";
+
+    function generateId(){
+      // simple 8-char ID: 4 letters + 4 digits
+      const letters = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+      let part1 = "";
+      for(let i=0;i<4;i++){
+        part1 += letters[Math.floor(Math.random()*letters.length)];
+      }
+      const part2 = String(Math.floor(1000 + Math.random()*9000));
+      return part1 + "-" + part2;
+    }
+
+    function loadMyId(){
+      try{
+        const saved = localStorage.getItem(MY_ID_STORAGE_KEY);
+        if(saved && saved.trim()) return saved.trim();
+      }catch(e){}
+      const id = generateId();
+      try{
+        localStorage.setItem(MY_ID_STORAGE_KEY, id);
+      }catch(e){}
+      return id;
+    }
+
+    function initMyId(){
+      const id = loadMyId();
+      if(myIdEl) myIdEl.value = id;
+    }
+
+    function copyMyId(){
+      if(!myIdEl) return;
+      myIdEl.select();
+      myIdEl.setSelectionRange(0, 9999);
+      let ok = false;
+      if(navigator.clipboard && navigator.clipboard.writeText){
+        navigator.clipboard.writeText(myIdEl.value).then(()=>{
+          onlineStatus.textContent = "ID copy ho gaya. Ab tum ye ID friend ko bhej sakte ho.";
+        }).catch(()=>{
+          document.execCommand("copy");
+          onlineStatus.textContent = "ID copy ho gaya (fallback).";
+        });
+        ok = true;
+      }
+      if(!ok){
+        document.execCommand("copy");
+        onlineStatus.textContent = "ID copy ho gaya.";
+      }
+    }
+
+    function demoOnlineList(){
+      if(!onlineListEl) return;
+      const demoPlayers = [
+        { name:"Akash-OP", status:"Online" },
+        { name:"NoobMaster", status:"Busy" },
+        { name:"QueenHunter", status:"Online" },
+        { name:"BlitzKing", status:"Online" },
+        { name:"SilentRook", status:"Busy" }
+      ];
+      onlineListEl.innerHTML = "";
+      demoPlayers.forEach(p=>{
+        const div = document.createElement("div");
+        div.className = "online-item";
+        const left = document.createElement("span");
+        left.textContent = p.name;
+        const right = document.createElement("span");
+        right.className = "online-status " + (p.status === "Online" ? "on" : "busy");
+        right.textContent = p.status;
+        div.appendChild(left);
+        div.appendChild(right);
+        onlineListEl.appendChild(div);
+      });
+    }
+
+    function inviteFriend(){
+      const id = (friendIdInput && friendIdInput.value || "").trim();
+      if(!id){
+        onlineStatus.textContent = "Pehle friend ka ID likho, phir Invite dabao.";
+        return;
+      }
+      onlineStatus.textContent = "Invite bheja (demo) ID: " + id + ". Real match server connect hone pe yahi se start hoga.";
+    }
+
+    function randomOnline(){
+      const sample = ["Akash-OP","QueenHunter","BlitzKing","RandomHero","NightBishop"];
+      const pick = sample[Math.floor(Math.random()*sample.length)];
+      onlineStatus.textContent = "Random player mila (demo): " + pick + ". Future mein yahi se real online match start karega.";
+    }
+
+    function showFutureAlert(type){
+      alert(type + " feature abhi demo mode mein hai.\nJab tum backend/server lagaoge, yahi button se real " + type.toLowerCase() + " chalega.");
+    }
+
+    if(copyIdBtn)       copyIdBtn.addEventListener("click", copyMyId);
+    if(inviteFriendBtn) inviteFriendBtn.addEventListener("click", inviteFriend);
+    if(randomOnlineBtn) randomOnlineBtn.addEventListener("click", randomOnline);
+    if(voiceChatBtn)    voiceChatBtn.addEventListener("click", ()=> showFutureAlert("Voice Chat"));
+    if(videoCallBtn)    videoCallBtn.addEventListener("click", ()=> showFutureAlert("Video Call"));
+    if(chatBtn)         chatBtn.addEventListener("click", ()=> showFutureAlert("Chat System"));
+
+    /* ===== TOP PROFILE (Player 1) – separate save ===== */
+    (function(){
+      const STORAGE_KEY_TOP = "chess_player_profile_top_v1";
+
+      const playerNameInput = document.getElementById("playerNameInput");
+      const saveNameBtn = document.getElementById("saveNameBtn");
+      const playerNameDisplay = document.getElementById("playerNameDisplay");
+
+      const playerRatingDisplay = document.getElementById("playerRatingDisplay");
+      const resetRatingBtn = document.getElementById("resetRatingBtn");
+      const incRatingBtn = document.getElementById("incRatingBtn");
+
+      const xpBar = document.getElementById("xpBar");
+      const xpDisplay = document.getElementById("xpDisplay");
+      const xpForNext = document.getElementById("xpForNext");
+      const levelDisplay = document.getElementById("levelDisplay");
+      const addXpBtn = document.getElementById("addXpBtn");
+      const addXpBigBtn = document.getElementById("addXpBigBtn");
+
+      const changeAvatarBtn = document.getElementById("changeAvatarBtn");
+      const avatarFileInput = document.getElementById("avatarFileInput");
+      const playerAvatarTop = document.getElementById("playerAvatarTop");
+
+      const defaultProfileTop = {
+        name: "",
+        rating: 1200,
+        xp: 0,
+        level: 1,
+        avatarDataUrl: ""
+      };
+
+      function loadTop(){
+        try{
+          const raw = localStorage.getItem(STORAGE_KEY_TOP);
+          if(!raw) return Object.assign({}, defaultProfileTop);
+          const obj = JSON.parse(raw);
+          return Object.assign({}, defaultProfileTop, obj);
+        }catch(e){
+          return Object.assign({}, defaultProfileTop);
+        }
+      }
+
+      function saveTop(p){
+        localStorage.setItem(STORAGE_KEY_TOP, JSON.stringify(p));
+      }
+
+      function xpNeeded(level){
+        return 100 * level;
+      }
+
+      function renderTop(){
+        const p = loadTop();
+        const name = p.name && p.name.trim() ? p.name.trim() : "Player 1 —";
+        // Firebase Auth hone par naam wahan se override hoga
+        if (playerNameDisplay && (!auth || !auth.currentUser)) {
+          playerNameDisplay.textContent = "Player 1: " + name;
+        }
+        playerRatingDisplay.textContent = p.rating;
+        levelDisplay.textContent = "Lv " + p.level;
+        xpDisplay.textContent = p.xp;
+        xpForNext.textContent = xpNeeded(p.level);
+
+        const pct = Math.min(100, Math.round((p.xp / xpNeeded(p.level)) * 100));
+        xpBar.style.width = pct + "%";
+
+        if(p.avatarDataUrl){
+          playerAvatarTop.src = p.avatarDataUrl;
+          playerAvatarTop.style.background = "";
+        } else {
+          playerAvatarTop.src = "";
+          playerAvatarTop.style.background = "linear-gradient(135deg,#374151,#111827)";
+        }
+      }
+
+      function saveTopName(){
+        const p = loadTop();
+        p.name = (playerNameInput.value || "").slice(0, 30);
+        saveTop(p);
+        renderTop();
+      }
+
+      function resetTopRating(){
+        const p = loadTop();
+        p.rating = 1200;
+        saveTop(p);
+        renderTop();
+      }
+
+      function incTopRating(){
+        const p = loadTop();
+        p.rating = (p.rating || 1200) + 10;
+        saveTop(p);
+        renderTop();
+      }
+
+      function addXp(amount){
+        const p = loadTop();
+        p.xp = (p.xp || 0) + amount;
+        while(p.xp >= xpNeeded(p.level)){
+          p.xp -= xpNeeded(p.level);
+          p.level = (p.level || 1) + 1;
+        }
+        saveTop(p);
+        renderTop();
+      }
+
+      function handleAvatarFileChange(e){
+        const file = e.target.files && e.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = function(ev){
+          const dataUrl = ev.target.result;
+          const p = loadTop();
+          p.avatarDataUrl = dataUrl;
+          saveTop(p);
+          renderTop();
+        };
+        reader.readAsDataURL(file);
+      }
+
+      if(saveNameBtn) saveNameBtn.addEventListener("click", saveTopName);
+      if(resetRatingBtn) resetRatingBtn.addEventListener("click", resetTopRating);
+      if(incRatingBtn)   incRatingBtn.addEventListener("click", incTopRating);
+      if(addXpBtn)       addXpBtn.addEventListener("click", ()=> addXp(10));
+      if(addXpBigBtn)    addXpBigBtn.addEventListener("click", ()=> addXp(40));
+      if(changeAvatarBtn) changeAvatarBtn.addEventListener("click", ()=> avatarFileInput.click());
+      if(avatarFileInput) avatarFileInput.addEventListener("change", handleAvatarFileChange);
+
+      try{ renderTop(); }catch(e){}
+    })();
+
+    /* ===== BOTTOM PROFILE (Player 2) – completely separate ===== */
+    (function(){
+      const STORAGE_KEY_BOTTOM = "chess_player_profile_bottom_v1";
+
+      const bottomNameInput = document.getElementById("bottomNameInput");
+      const saveNameBottomBtn = document.getElementById("saveNameBottomBtn");
+      const playerNameBottom = document.getElementById("playerNameBottom");
+
+      const playerAvatarBottom = document.getElementById("playerAvatarBottom");
+      const changeAvatarBottomBtn = document.getElementById("changeAvatarBottomBtn");
+      const avatarBottomFileInput = document.getElementById("avatarBottomFileInput");
+
+      const viewProfileBtn = document.getElementById("viewProfileBtn");
+      const resetProfileBtn = document.getElementById("resetProfileBtn");
+
+      const defaultBottom = {
+        name: "",
+        avatarDataUrl: ""
+      };
+
+      function loadBottom(){
+        try{
+          const raw = localStorage.getItem(STORAGE_KEY_BOTTOM);
+          if(!raw) return Object.assign({}, defaultBottom);
+          const obj = JSON.parse(raw);
+          return Object.assign({}, defaultBottom, obj);
+        }catch(e){
+          return Object.assign({}, defaultBottom);
+        }
+      }
+
+      function saveBottom(p){
+        localStorage.setItem(STORAGE_KEY_BOTTOM, JSON.stringify(p));
+      }
+
+      function renderBottom(){
+        const p = loadBottom();
+        const name = p.name && p.name.trim() ? p.name.trim() : "Player 2 —";
+        playerNameBottom.textContent = name;
+
+        if(p.avatarDataUrl){
+          playerAvatarBottom.src = p.avatarDataUrl;
+          playerAvatarBottom.style.background = "";
+        } else {
+          playerAvatarBottom.src = "";
+          playerAvatarBottom.style.background = "linear-gradient(135deg,#374151,#111827)";
+        }
+      }
+
+      function saveBottomName(){
+        const p = loadBottom();
+        p.name = (bottomNameInput.value || "").slice(0, 30);
+        saveBottom(p);
+        renderBottom();
+      }
+
+      function handleBottomAvatarChange(e){
+        const file = e.target.files && e.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = function(ev){
+          const dataUrl = ev.target.result;
+          const p = loadBottom();
+          p.avatarDataUrl = dataUrl;
+          saveBottom(p);
+          renderBottom();
+        };
+        reader.readAsDataURL(file);
+      }
+
+      function viewProfile(){
+        const p = loadBottom();
+        const name = p.name || "—";
+        alert(`Player 2 Name: ${name}`);
+      }
+      function resetProfile(){
+        if(!confirm("Player 2 ka profile reset karein?")) return;
+        saveBottom(Object.assign({}, defaultBottom));
+        renderBottom();
+      }
+
+      if(saveNameBottomBtn) saveNameBottomBtn.addEventListener("click", saveBottomName);
+      if(changeAvatarBottomBtn) changeAvatarBottomBtn.addEventListener("click", ()=> avatarBottomFileInput.click());
+      if(avatarBottomFileInput) avatarBottomFileInput.addEventListener("change", handleBottomAvatarChange);
+      if(viewProfileBtn) viewProfileBtn.addEventListener("click", viewProfile);
+      if(resetProfileBtn) resetProfileBtn.addEventListener("click", resetProfile);
+
+      try{ renderBottom(); }catch(e){}
+    })();
+
+    window.addEventListener("load", ()=>{
+      drawBoard();
+      resetTimer();
+      updateStatsUI();
+      initMyId();
+      demoOnlineList();
+    });
+    window.addEventListener("resize", ()=> drawBoard());
+  </script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+{
+  "project_info": {
+    "project_number": "650837847392",
+    "firebase_url": "https://saini-d01bf-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "saini-d01bf",
+    "storage_bucket": "saini-d01bf.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:650837847392:android:245f87365eeb0229df8205",
+        "android_client_info": {
+          "package_name": "Chess3Dgame.com"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "650837847392-nn1sl5p55857nn0bct8c3201c3im8st2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQ0dEhfc5J8b91j4H4rUpgQowV_UqWh3A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "650837847392-nn1sl5p55857nn0bct8c3201c3im8st2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:650837847392:android:8f798d2dedbe558ddf8205",
+        "android_client_info": {
+          "package_name": "Saini.com"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "650837847392-nn1sl5p55857nn0bct8c3201c3im8st2.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBQ0dEhfc5J8b91j4H4rUpgQowV_UqWh3A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "650837847392-nn1sl5p55857nn0bct8c3201c3im8st2.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
